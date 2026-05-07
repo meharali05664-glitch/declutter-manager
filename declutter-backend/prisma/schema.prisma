@@ -4,25 +4,42 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  createdAt DateTime @default(now())
+  id            String         @id @default(uuid())
+  phone         String?        @unique
+  email         String?        @unique
+  password      String?
+  name          String
+  country       String         @default("PK")
+  currency      String         @default("PKR")
+  isPro         Boolean        @default(false)
+  createdAt     DateTime       @default(now())
   subscriptions Subscription[]
 }
 
 model Subscription {
-  id           String   @id @default(uuid())
-  name         String
-  amount       Float
-  billingCycle String
-  nextRenewal  DateTime
-  status       String   @default("active")
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  createdAt    DateTime @default(now())
+  id               String   @id @default(uuid())
+  name             String
+  category         String   @default("Other")
+  icon             String   @default("📦")
+  color            String   @default("#7C3AED")
+  amount           Float
+  myShare          Float
+  billingCycle     String   @default("monthly")
+  nextRenewal      DateTime
+  status           String   @default("active")
+  isShared         Boolean  @default(false)
+  sharedWith       String   @default("[]")
+  cancelDifficulty String   @default("yellow")
+  paymentMethod    String?
+  usageHours       Float    @default(0)
+  isZombie         Boolean  @default(false)
+  notes            String?
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
