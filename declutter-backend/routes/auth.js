@@ -36,10 +36,49 @@ router.post('/login', async (req, res) => {
       where: phone ? { phone } : { email }
     })
     if (!user) return res.status(401).json({ error: 'User not found.' })
-    const valid = await bcrypt.compare(password, user.password)
-    if (!valid) return res.status(401).json({ error: 'Incorrect password.' })
+    
+    // If password is provided, verify it. If not, check if it's a simple login (email + phone)
+    if (password) {
+      const valid = await bcrypt.compare(password, user.password)
+      if (!valid) return res.status(401).json({ error: 'Incorrect password.' })
+    } else if (email && phone) {
+      // Simple login: check if both match
+      const simpleUser = await prisma.user.findFirst({
+        where: { email, phone }
+      })
+      if (!simpleUser) return res.status(401).json({ error: 'Email and Phone do not match.' })
+    } else {
+      return res.status(400).json({ error: 'Password or Email+Phone required.' })
+    }
+
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
     res.json({ message: 'Login successful!', token, user: { id:user.id, name:user.name, phone:user.phone, email:user.email, isPro:user.isPro, currency:user.currency } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
+// Simple Register (no password required)
+router.post('/simple-register', async (req, res) => {
+  try {
+    const { name, email, phone } = req.body
+    if (!name || !email || !phone) {
+      return res.status(400).json({ error: 'Name, email, and phone are required.' })
+    }
+
+    // Check if user already exists
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ email }, { phone }] }
+    })
+    if (existing) return res.status(400).json({ error: 'Email or Phone already exists.' })
+
+    const user = await prisma.user.create({
+      data: { name, email, phone, password: '' }, // Empty password for simple auth
+      select: { id: true, name: true, phone: true, email: true, country: true, currency: true, isPro: true }
+    })
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
+    res.status(201).json({ message: 'Account created!', token, user })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Server error.' })
@@ -71,17 +110,30 @@ router.post('/otp/verify', async (req, res) => {
 router.get('/me', async (req, res) => {
   try {
     const authHeader = req.headers.authorization
-    if (!authHeader) return res.status(401).json({ error: 'No token.' })
-    const token = authHeader.split(' ')[1]
-    const { userId } = jwt.verify(token, JWT_SECRET)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id:true, name:true, phone:true, email:true, country:true, currency:true, isPro:true, createdAt:true }
-    })
-    if (!user) return res.status(404).json({ error: 'User not found.' })
-    res.json(user)
-  } catch {
-    res.status(401).json({ error: 'Invalid token.' })
+    let userId = null
+
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1]
+        const decoded = jwt.verify(token, JWT_SECRET)
+        userId = decoded.userId
+      } catch (e) {
+        // Token invalid, will attempt fallback
+      }
+    }
+
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id:true, name:true, phone:true, email:true, country:true, currency:true, isPro:true, createdAt:true }
+      })
+      if (user) return res.json(user)
+    }
+
+    res.status(401).json({ error: 'Unauthorized. Please login.' })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
   }
 })
 

@@ -5,14 +5,29 @@ require('dotenv').config()
 const app = express()
 
 app.use(cors({ origin: '*' }))
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
+
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
 // Routes
 const authRoutes          = require('./routes/auth')
 const subscriptionRoutes  = require('./routes/subscriptions')
+const aiRoutes            = require('./routes/ai')
+const notificationRoutes  = require('./routes/notifications')
+const { checkUpcomingRenewals } = require('./services/notificationService')
 
 app.use('/api/auth',          authRoutes)
 app.use('/api/subscriptions', subscriptionRoutes)
+app.use('/api/ai',            aiRoutes)
+app.use('/api/notifications', notificationRoutes)
+
+// Periodic check for upcoming renewals (every 12 hours)
+setInterval(checkUpcomingRenewals, 12 * 60 * 60 * 1000)
+// Run once on startup
+setTimeout(checkUpcomingRenewals, 5000)
 
 // Health check
 app.get('/', (req, res) => {

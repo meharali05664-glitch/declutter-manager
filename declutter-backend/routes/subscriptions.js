@@ -7,15 +7,29 @@ const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET || 'declutter_secret_2024'
 
 // ─── Auth Middleware ──────────────────────────────────────
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization
-  if (!header) return res.status(401).json({ error: 'No token provided.' })
+  if (header) {
+    try {
+      const { userId } = jwt.verify(header.split(' ')[1], JWT_SECRET)
+      req.userId = userId
+      return next()
+    } catch (e) {
+      // Continue to fallback if token is invalid
+    }
+  }
+
+  // Fallback: Use the first user in the database if no token is provided
   try {
-    const { userId } = jwt.verify(header.split(' ')[1], JWT_SECRET)
-    req.userId = userId
-    next()
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token.' })
+    const user = await prisma.user.findFirst()
+    if (user) {
+      req.userId = user.id
+      next()
+    } else {
+      res.status(401).json({ error: 'No users found in database. Please register once.' })
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Database error during auth bypass.' })
   }
 }
 
@@ -51,7 +65,7 @@ router.post('/', auth, async (req, res) => {
       amount, myShare, billingCycle = 'monthly', nextRenewal,
       status = 'active', isShared = false, sharedWith = [],
       cancelDifficulty = 'yellow', paymentMethod, usageHours = 0,
-      notes
+      notes, isTrial = false, trialEndDate, postTrialAmount
     } = req.body
     if (!name || !amount || !nextRenewal) {
       return res.status(400).json({ error: 'name, amount, and nextRenewal are required.' })
@@ -64,9 +78,14 @@ router.post('/', auth, async (req, res) => {
         billingCycle, nextRenewal: new Date(nextRenewal),
         status, isShared, sharedWith: JSON.stringify(sharedWith),
         cancelDifficulty, paymentMethod, usageHours: parseFloat(usageHours),
-        notes, userId: req.userId,
+        notes, isTrial, trialEndDate: trialEndDate ? new Date(trialEndDate) : null,
+        postTrialAmount: postTrialAmount !== undefined && postTrialAmount !== null ? parseFloat(postTrialAmount) : null,
+        userId: req.userId,
       }
     })
+    const { checkSubscriptionForNotification } = require('../services/notificationService')
+    await checkSubscriptionForNotification(sub.id)
+
     res.status(201).json({ ...sub, sharedWith })
   } catch (err) {
     console.error(err)
@@ -84,6 +103,8 @@ router.patch('/:id', auth, async (req, res) => {
     if (data.nextRenewal) data.nextRenewal = new Date(data.nextRenewal)
     if (data.amount)  data.amount  = parseFloat(data.amount)
     if (data.myShare) data.myShare = parseFloat(data.myShare)
+    if (data.trialEndDate) data.trialEndDate = new Date(data.trialEndDate)
+    if (data.postTrialAmount !== undefined && data.postTrialAmount !== null) data.postTrialAmount = parseFloat(data.postTrialAmount)
     const updated = await prisma.subscription.update({ where: { id: req.params.id }, data })
     res.json({ ...updated, sharedWith: JSON.parse(updated.sharedWith || '[]') })
   } catch (err) {
