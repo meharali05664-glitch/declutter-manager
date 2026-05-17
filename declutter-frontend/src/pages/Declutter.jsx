@@ -67,6 +67,7 @@ export default function Declutter() {
   
   // New AI state
   const [aiRecs, setAiRecs] = useState([])
+  const [communityInsights, setCommunityInsights] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -88,6 +89,7 @@ export default function Declutter() {
         }
         
         setAiRecs(recs)
+        setCommunityInsights(res.data.communityInsights || [])
         setError(null)
       } catch (err) {
         console.error('AI Hub Connection Error:', err.response?.data || err.message)
@@ -172,6 +174,31 @@ export default function Declutter() {
           </div>
         </div>
       </div>
+
+      {/* Community Insights */}
+      {communityInsights.length > 0 && !loading && (
+        <div className="px" style={{ marginBottom:'24px' }}>
+          <h2 style={{ fontSize:'18px', fontWeight:'700', marginBottom:'16px' }}>Community Insights 🌍</h2>
+          <div className="grid-responsive" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))' }}>
+            {communityInsights.map((insight, i) => (
+              <div key={insight.id} className={`glass anim-up d${Math.min(i+1,5)}`} style={{ padding:'20px', borderColor:'rgba(96,165,250,0.2)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
+                  <span style={{ fontSize:'24px' }}>📊</span>
+                  <div>
+                    <p style={{ fontSize:'15px', fontWeight:'700' }}>{insight.category} Subscriptions</p>
+                    <p style={{ fontSize:'12px', color:'var(--text2)' }}>Based on {insight.totalUsers} users</p>
+                  </div>
+                </div>
+                <div style={{ background:'rgba(255,255,255,0.03)', borderLeft:'3px solid #60A5FA', padding:'12px', borderRadius:'0 8px 8px 0' }}>
+                  <p style={{ fontSize:'13px', color:'var(--text1)' }}>
+                    <span style={{ fontWeight:'700', color:'#60A5FA' }}>Insight:</span> {insight.cancelPercent}% of users cancelled their {insight.category} subscriptions, while {insight.keptPercent}% kept them.
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recommendations */}
       <div className="px" style={{ display:'flex', flexDirection:'column', gap:'16px', paddingBottom:'40px' }}>

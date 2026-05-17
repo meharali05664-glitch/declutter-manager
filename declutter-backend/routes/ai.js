@@ -58,9 +58,40 @@ router.get('/recommendations', auth, async (req, res) => {
     // 2. Call the AI service to get RAG recommendations
     const recommendations = getSmartRecommendations(processedSubs)
 
+    // Gather categories from user's subs
+    const categories = [...new Set(subs.map(s => s.category))]
+    
+    const communityInsights = []
+    for (const cat of categories) {
+      // Find all subscriptions globally for this category
+      const catSubs = await prisma.subscription.findMany({
+        where: { category: cat }
+      })
+      if (catSubs.length === 0) continue;
+      
+      const totalUsers = new Set(catSubs.map(s => s.userId)).size;
+      const cancelledCount = catSubs.filter(s => s.status === 'cancelled').length;
+      const totalCount = catSubs.length;
+      
+      const cancelPercent = Math.round((cancelledCount / totalCount) * 100);
+      const keptPercent = 100 - cancelPercent;
+      
+      if (totalUsers > 0) {
+        communityInsights.push({
+          id: `insight-${cat}`,
+          category: cat,
+          totalUsers,
+          cancelPercent,
+          keptPercent,
+          text: `Community Insight: ${cancelPercent}% of users cancelled ${cat} subscriptions.`
+        })
+      }
+    }
+
     // 3. Return the smart recommendations
     res.json({
       recommendations,
+      communityInsights,
       timestamp: new Date().toISOString(),
       source: 'Declutter RAG-AI Engine v1.0'
     })
