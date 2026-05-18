@@ -3,26 +3,28 @@ const router = express.Router()
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { PrismaClient } = require('@prisma/client')
+const nodemailer = require('nodemailer')
 
 const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET || 'declutter_secret_2024'
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { name, phone, email, password, country = 'PK', currency = 'PKR' } = req.body
-    if (!name || (!phone && !email) || !password) {
-      return res.status(400).json({ error: 'Name, phone/email, and password are required.' })
+    const { name, email, password, country = 'PK', currency = 'PKR' } = req.body
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required.' })
     }
     const hashedPassword = await bcrypt.hash(password, 10)
     const user = await prisma.user.create({
-      data: { name, phone: phone || null, email: email || null, password: hashedPassword, country, currency },
+      data: { name, email, password: hashedPassword, country, currency },
       select: { id: true, name: true, phone: true, email: true, country: true, currency: true, isPro: true }
     })
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
     res.status(201).json({ message: 'Account created!', token, user })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(400).json({ error: 'Phone/Email already exists.' })
+    if (err.code === 'P2002') return res.status(400).json({ error: 'Email already exists.' })
     console.error(err)
     res.status(500).json({ error: 'Server error.' })
   }
@@ -31,25 +33,20 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
   try {
-    const { phone, email, password } = req.body
-    const user = await prisma.user.findFirst({
-      where: phone ? { phone } : { email }
-    })
-    if (!user) return res.status(401).json({ error: 'User not found.' })
-    
-    // If password is provided, verify it. If not, check if it's a simple login (email + phone)
-    if (password) {
-      const valid = await bcrypt.compare(password, user.password)
-      if (!valid) return res.status(401).json({ error: 'Incorrect password.' })
-    } else if (email && phone) {
-      // Simple login: check if both match
-      const simpleUser = await prisma.user.findFirst({
-        where: { email, phone }
-      })
-      if (!simpleUser) return res.status(401).json({ error: 'Email and Phone do not match.' })
-    } else {
-      return res.status(400).json({ error: 'Password or Email+Phone required.' })
+    const { email, password } = req.body
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' })
     }
+    
+    const user = await prisma.user.findFirst({
+      where: { email }
+    })
+    
+    if (!user) return res.status(401).json({ error: 'User not found.' })
+    if (!user.password) return res.status(401).json({ error: 'User does not have a password set.' })
+    
+    const valid = await bcrypt.compare(password, user.password)
+    if (!valid) return res.status(401).json({ error: 'Incorrect password.' })
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
     res.json({ message: 'Login successful!', token, user: { id:user.id, name:user.name, phone:user.phone, email:user.email, isPro:user.isPro, currency:user.currency } })
@@ -59,51 +56,78 @@ router.post('/login', async (req, res) => {
   }
 })
 
-// Simple Register (no password required)
-router.post('/simple-register', async (req, res) => {
+// Forgot Password
+router.post('/forgot-password', async (req, res) => {
   try {
-    const { name, email, phone } = req.body
-    if (!name || !email || !phone) {
-      return res.status(400).json({ error: 'Name, email, and phone are required.' })
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: 'Email is required.' })
+
+    const user = await prisma.user.findFirst({ where: { email } })
+    if (!user) return res.status(400).json({ error: 'User with this email not found.' })
+
+    // Generate a reset token valid for 15 minutes
+    const resetToken = jwt.sign({ userId: user.id, reset: true }, JWT_SECRET, { expiresIn: '15m' })
+    const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`
+
+    // Setup nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    })
+
+    const mailOptions = {
+      from: `"Declutter App" <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: 'Password Reset Request',
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Hello ${user.name},</p>
+        <p>You requested to reset your password. Click the link below to set a new password:</p>
+        <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background:#10B981;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
+        <p>This link is valid for 15 minutes.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `
     }
 
-    // Check if user already exists
-    const existing = await prisma.user.findFirst({
-      where: { OR: [{ email }, { phone }] }
-    })
-    if (existing) return res.status(400).json({ error: 'Email or Phone already exists.' })
-
-    const user = await prisma.user.create({
-      data: { name, email, phone, password: '' }, // Empty password for simple auth
-      select: { id: true, name: true, phone: true, email: true, country: true, currency: true, isPro: true }
-    })
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
-    res.status(201).json({ message: 'Account created!', token, user })
+    await transporter.sendMail(mailOptions)
+    res.json({ message: 'Password reset link sent to your email.' })
   } catch (err) {
-    console.error(err)
+    console.error('Forgot password error:', err)
+    res.status(500).json({ error: 'Failed to process forgot password request.' })
+  }
+})
+
+// Reset Password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' })
+
+    let decoded
+    try {
+      decoded = jwt.verify(token, JWT_SECRET)
+    } catch (err) {
+      return res.status(400).json({ error: 'Invalid or expired token.' })
+    }
+
+    if (!decoded.reset) {
+      return res.status(400).json({ error: 'Invalid token type.' })
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { password: hashedPassword }
+    })
+
+    res.json({ message: 'Password successfully reset.' })
+  } catch (err) {
+    console.error('Reset password error:', err)
     res.status(500).json({ error: 'Server error.' })
   }
-})
-
-// OTP Request (mock — integrate Twilio/2Factor for production)
-router.post('/otp/send', async (req, res) => {
-  const { phone } = req.body
-  if (!phone) return res.status(400).json({ error: 'Phone number required.' })
-  // In production: send via Twilio Verify or 2Factor.in
-  console.log(`OTP for ${phone}: 123456 (dev mode)`)
-  res.json({ message: 'OTP sent!', dev_otp: '123456' })
-})
-
-// OTP Verify (mock)
-router.post('/otp/verify', async (req, res) => {
-  const { phone, otp } = req.body
-  if (otp !== '123456') return res.status(401).json({ error: 'Invalid OTP.' })
-  let user = await prisma.user.findUnique({ where: { phone } })
-  if (!user) {
-    user = await prisma.user.create({ data: { phone, name: 'User', password: '' } })
-  }
-  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' })
-  res.json({ message: 'Verified!', token, user: { id:user.id, name:user.name, phone:user.phone, isPro:user.isPro } })
 })
 
 // Get current user

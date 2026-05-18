@@ -163,9 +163,9 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  const login = async (email, phone) => {
+  const login = async (email, password) => {
     try {
-      const res = await axios.post(`${API_BASE}/auth/login`, { email, phone })
+      const res = await axios.post(`${API_BASE}/auth/login`, { email, password })
       const { token, user } = res.data
       localStorage.setItem('declutter_token', token)
       localStorage.setItem('declutter_user', JSON.stringify(user))
@@ -177,9 +177,9 @@ export function AppProvider({ children }) {
     }
   }
 
-  const register = async (name, email, phone) => {
+  const register = async (name, email, password) => {
     try {
-      const res = await axios.post(`${API_BASE}/auth/simple-register`, { name, email, phone })
+      const res = await axios.post(`${API_BASE}/auth/register`, { name, email, password })
       const { token, user } = res.data
       localStorage.setItem('declutter_token', token)
       localStorage.setItem('declutter_user', JSON.stringify(user))
@@ -188,6 +188,24 @@ export function AppProvider({ children }) {
       return { success: true }
     } catch (err) {
       return { success: false, error: err.response?.data?.error || 'Registration failed' }
+    }
+  }
+
+  const forgotPassword = async (email) => {
+    try {
+      const res = await axios.post(`${API_BASE}/auth/forgot-password`, { email })
+      return { success: true, message: res.data.message }
+    } catch (err) {
+      return { success: false, error: err.response?.data?.error || 'Failed to send reset email' }
+    }
+  }
+
+  const resetPassword = async (token, newPassword) => {
+    try {
+      const res = await axios.post(`${API_BASE}/auth/reset-password`, { token, newPassword })
+      return { success: true, message: res.data.message }
+    } catch (err) {
+      return { success: false, error: err.response?.data?.error || 'Failed to reset password' }
     }
   }
 
@@ -234,7 +252,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       subscriptions, user, addSubscription, updateSubscription, deleteSubscription,
-      login, register, logout,
+      login, register, logout, forgotPassword, resetPassword,
       activeSubs, monthlySpend, yearlySpend, healthScore, potentialSavings,
       upcoming, zombies, categories, categoryBreakdown, spendHistory: monthlySpend > 0 ? HISTORY : [],
       SERVICES, loading, error, refresh: fetchSubscriptions, refreshUserProfile: fetchUserProfile, savedAmount,

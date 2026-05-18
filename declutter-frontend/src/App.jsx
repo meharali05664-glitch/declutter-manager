@@ -8,6 +8,7 @@ import Insights from './pages/Insights'
 import Settings from './pages/Settings'
 import AddSubscription from './pages/AddSubscription'
 import Auth from './pages/Auth'
+import ResetPassword from './pages/ResetPassword'
 import { useApp } from './context/AppContext'
 import { Navigate } from 'react-router-dom'
 
@@ -21,6 +22,7 @@ function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Auth />} />
         <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Auth />} />
+        <Route path="/reset-password" element={user ? <Navigate to="/dashboard" /> : <ResetPassword />} />
         
         <Route path="/" element={user ? <Dashboard /> : <Navigate to="/login" />} />
         <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
