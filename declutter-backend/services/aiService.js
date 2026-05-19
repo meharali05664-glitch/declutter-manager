@@ -219,20 +219,23 @@ function getSmartRecommendations(subscriptions) {
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-async function getPrePurchaseAdvice(serviceName, stats) {
+async function getPrePurchaseAdvice(serviceName, category, stats) {
   const apiKey = process.env.GEMINI_API_KEY;
+  const isNewService = stats.totalCount === 0;
+
   const systemPrompt = `You are Declutter AI, an assistant helping users manage subscriptions.
-Analyze the following community subscription data and recommend if the user should subscribe.
+Analyze the community subscription data and recommend if the user should subscribe.
 Respond in strict JSON format:
 {
   "recommendation": "buy" | "consider" | "avoid",
   "confidence": "high" | "medium" | "low",
   "title": "Short title",
-  "text": "Detailed advice mentioning community statistics.",
+  "text": "Detailed advice.",
   "tips": "Practical tip"
 }`;
 
-  const userPrompt = `Service Name: ${serviceName}
+  let userPrompt = `Service Name: ${serviceName}
+Category: ${category}
 Community Stats:
 - Total community users with this: ${stats.totalCount}
 - Active: ${stats.activeCount}
@@ -240,11 +243,24 @@ Community Stats:
 - Average usage hours/month: ${stats.avgUsageHours}h
 - Share rate: ${Math.round(stats.shareRate * 100)}%
 - Average monthly price: Rs. ${Math.round(stats.avgAmount)}
-- Retention rate: ${Math.round(stats.retentionRate * 100)}%
+- Retention rate: ${Math.round(stats.retentionRate * 100)}%`;
 
-Generate recommendations using this community context. Mention specific stats if helpful. If community data is empty (0 users), generate advice based on general knowledge of the service.`;
+  if (isNewService) {
+    userPrompt += `\n\nNote: There is no community data for this service yet. Generate smart, helpful, and relevant advice based on general knowledge of "${serviceName}" (which is in the "${category}" category). Do not say data is unavailable; instead, formulate it as a smart advice for a new service and offer specific recommendation on how the user can decide if it is worth the cost.`;
+  } else {
+    userPrompt += `\n\nGenerate recommendations using this community context. Mention specific stats if helpful.`;
+  }
 
   if (!apiKey) {
+    if (isNewService) {
+      return {
+        recommendation: 'consider',
+        confidence: 'medium',
+        title: `Explore ${serviceName}`,
+        text: `This is a new ${category} service in our community. We recommend starting with a trial or evaluating your estimated usage before signing up.`,
+        tips: `For ${category} services, set a reminder a few days before renewal to review if you're getting value.`
+      };
+    }
     const retention = stats.retentionRate || 0.5;
     const recommendation = retention >= 0.7 ? 'buy' : retention >= 0.4 ? 'consider' : 'avoid';
     return {
@@ -268,9 +284,9 @@ Generate recommendations using this community context. Mention specific stats if
     return {
       recommendation: 'consider',
       confidence: 'low',
-      title: `${serviceName} Insight`,
-      text: 'Unable to analyze community data at the moment.',
-      tips: 'Audit your potential usage before signing up.'
+      title: `${serviceName} Recommendation`,
+      text: `Evaluate your usage for this ${category} service. Ensure you will use it regularly to justify the monthly expense.`,
+      tips: 'We recommend trying it for 1 month first.'
     };
   }
 }

@@ -162,7 +162,7 @@ If you are unsure about any field, return an empty string for that field (or 0 f
  */
 router.get('/advice/add', auth, async (req, res) => {
   try {
-    const { name } = req.query;
+    const { name, category } = req.query;
     if (!name) return res.status(400).json({ error: 'Name query parameter is required.' });
 
     // Look up matching community subscriptions case-insensitively
@@ -178,7 +178,7 @@ router.get('/advice/add', auth, async (req, res) => {
     const avgAmount = totalCount > 0 ? (allMatches.reduce((acc, s) => acc + s.amount, 0) / totalCount) : 0;
     const retentionRate = totalCount > 0 ? (activeCount / totalCount) : 0.5;
 
-    const advice = await getPrePurchaseAdvice(name, {
+    const advice = await getPrePurchaseAdvice(name, category || 'Other', {
       totalCount,
       activeCount,
       cancelledCount,

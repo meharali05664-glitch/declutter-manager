@@ -130,7 +130,7 @@ export default function AddSubscription() {
         if (token) headers['Authorization'] = `Bearer ${token}`
 
         const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-        const res = await fetch(`${API_BASE}/ai/advice/add?name=${encodeURIComponent(form.name)}`, { headers })
+        const res = await fetch(`${API_BASE}/ai/advice/add?name=${encodeURIComponent(form.name)}&category=${encodeURIComponent(form.category)}`, { headers })
         if (res.ok) {
           const data = await res.json()
           setAdvice(data)
@@ -146,7 +146,7 @@ export default function AddSubscription() {
     }, 600)
 
     return () => clearTimeout(handler)
-  }, [form.name]) // Wait, React imports are already at top
+  }, [form.name, form.category])
 
 
   const handleSave = async () => {
