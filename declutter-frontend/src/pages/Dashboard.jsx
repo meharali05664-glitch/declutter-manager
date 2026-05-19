@@ -33,7 +33,7 @@ function ScoreRing({ score }) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { user, monthlySpend, yearlySpend, healthScore, upcoming, zombies, activeSubs, potentialSavings } = useApp()
+  const { user, monthlySpend, yearlySpend, healthScore, upcoming, zombies, activeSubs, potentialSavings, theme, toggleTheme } = useApp()
 
   const trialSubs = activeSubs.filter(s => s.isTrial)
   const endingTrials = trialSubs.filter(s => daysUntil(s.trialEndDate) <= 3)
@@ -63,6 +63,10 @@ export default function Dashboard() {
             <h1 style={{ fontSize:'22px', fontWeight:'800', fontFamily:'Sora,sans-serif' }}>{user.name.split(' ')[0]}</h1>
           </div>
           <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={toggleTheme} id="header-theme-btn"
+              style={{ background:'rgba(var(--theme-rgb),0.1)', border:'1px solid rgba(var(--theme-rgb),0.1)', borderRadius:'12px', width:'38px', height:'38px', color:'var(--text)', fontSize:'18px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button onClick={() => navigate('/add')} id="header-add-btn"
               style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', border:'none', borderRadius:'12px', width:'38px', height:'38px', color:'white', fontSize:'18px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(124,58,237,0.4)' }}>+</button>
             <NotificationBell />

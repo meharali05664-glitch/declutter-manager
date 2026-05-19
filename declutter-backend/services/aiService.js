@@ -217,4 +217,120 @@ function getSmartRecommendations(subscriptions) {
   return uniqueRecs.slice(0, 12); 
 }
 
-module.exports = { getSmartRecommendations };
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+async function getPrePurchaseAdvice(serviceName, stats) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const systemPrompt = `You are Declutter AI, an assistant helping users manage subscriptions.
+Analyze the following community subscription data and recommend if the user should subscribe.
+Respond in strict JSON format:
+{
+  "recommendation": "buy" | "consider" | "avoid",
+  "confidence": "high" | "medium" | "low",
+  "title": "Short title",
+  "text": "Detailed advice mentioning community statistics.",
+  "tips": "Practical tip"
+}`;
+
+  const userPrompt = `Service Name: ${serviceName}
+Community Stats:
+- Total community users with this: ${stats.totalCount}
+- Active: ${stats.activeCount}
+- Cancelled: ${stats.cancelledCount}
+- Average usage hours/month: ${stats.avgUsageHours}h
+- Share rate: ${Math.round(stats.shareRate * 100)}%
+- Average monthly price: Rs. ${Math.round(stats.avgAmount)}
+- Retention rate: ${Math.round(stats.retentionRate * 100)}%
+
+Generate recommendations using this community context. Mention specific stats if helpful. If community data is empty (0 users), generate advice based on general knowledge of the service.`;
+
+  if (!apiKey) {
+    const retention = stats.retentionRate || 0.5;
+    const recommendation = retention >= 0.7 ? 'buy' : retention >= 0.4 ? 'consider' : 'avoid';
+    return {
+      recommendation,
+      confidence: 'medium',
+      title: `${serviceName} Community Analysis`,
+      text: `Based on ${stats.totalCount} community users, ${Math.round(retention * 100)}% maintain an active subscription. Average usage is ${stats.avgUsageHours || 0}h/month.`,
+      tips: `Consider splitting costs if available, as ${Math.round((stats.shareRate || 0)*100)}% of users share this plan.`
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const result = await model.generateContent([systemPrompt, userPrompt]);
+    const responseText = result.response.text();
+    const cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error('Gemini Pre-purchase Advice Error:', err);
+    return {
+      recommendation: 'consider',
+      confidence: 'low',
+      title: `${serviceName} Insight`,
+      text: 'Unable to analyze community data at the moment.',
+      tips: 'Audit your potential usage before signing up.'
+    };
+  }
+}
+
+async function getPreCancelAdvice(sub, stats) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const systemPrompt = `You are Declutter AI, helping users decide whether to cancel a subscription.
+Analyze the user's subscription details and community stats. Recommend if they should cancel.
+Respond in strict JSON format:
+{
+  "recommendation": "cancel" | "keep" | "pause",
+  "title": "Short title",
+  "text": "Detailed advice comparing user usage vs community, and expected savings.",
+  "savings": "Estimated annual savings in Rs."
+}`;
+
+  const userPrompt = `Subscription details:
+- Name: ${sub.name}
+- Category: ${sub.category}
+- User monthly usage: ${sub.usageHours}h
+- User monthly spend: Rs. ${sub.myShare}
+- Is shared: ${sub.isShared}
+
+Community Stats for ${sub.name}:
+- Total community users: ${stats.totalCount}
+- Active: ${stats.activeCount}
+- Cancelled: ${stats.cancelledCount}
+- Average usage hours/month: ${stats.avgUsageHours}h
+- Retention rate: ${Math.round(stats.retentionRate * 100)}%
+
+Generate custom cancellation advice. If their usage is low (zombie), strongly recommend canceling. Compare their usage vs community average.`;
+
+  if (!apiKey) {
+    const isZombie = sub.usageHours < 2;
+    return {
+      recommendation: isZombie ? 'cancel' : 'keep',
+      title: `Cancel ${sub.name}?`,
+      text: isZombie 
+        ? `You have very low usage (${sub.usageHours}h) compared to community average of ${stats.avgUsageHours}h. Cancelling will save you Rs. ${sub.myShare * 12} annually.` 
+        : `You are using this service for ${sub.usageHours}h/month. Keep it if it brings value.`,
+      savings: sub.myShare * 12
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const result = await model.generateContent([systemPrompt, userPrompt]);
+    const responseText = result.response.text();
+    const cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error('Gemini Pre-cancel Advice Error:', err);
+    return {
+      recommendation: 'cancel',
+      title: `Cancel ${sub.name}`,
+      text: `Cancelling will save you Rs. ${sub.myShare * 12} per year.`,
+      savings: sub.myShare * 12
+    };
+  }
+}
+
+module.exports = { getSmartRecommendations, getPrePurchaseAdvice, getPreCancelAdvice };

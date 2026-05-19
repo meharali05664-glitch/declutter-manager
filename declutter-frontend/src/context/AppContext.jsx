@@ -36,6 +36,9 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [notifications, setNotifications] = useState([])
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('declutter_theme') || 'dark'
+  })
 
   const fetchSubscriptions = useCallback(async () => {
     const token = localStorage.getItem('declutter_token')
@@ -101,6 +104,18 @@ export function AppProvider({ children }) {
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
   }, [fetchSubscriptions, fetchUserProfile, fetchNotifications])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'light') {
+      root.classList.add('light')
+    } else {
+      root.classList.remove('light')
+    }
+    localStorage.setItem('declutter_theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark')
 
   const addSubscription = useCallback(async (sub) => {
     const token = localStorage.getItem('declutter_token')
@@ -256,7 +271,8 @@ export function AppProvider({ children }) {
       activeSubs, monthlySpend, yearlySpend, healthScore, potentialSavings,
       upcoming, zombies, categories, categoryBreakdown, spendHistory: monthlySpend > 0 ? HISTORY : [],
       SERVICES, loading, error, refresh: fetchSubscriptions, refreshUserProfile: fetchUserProfile, savedAmount,
-      notifications, markNotificationAsRead, markAllNotificationsAsRead, fetchNotifications
+      notifications, markNotificationAsRead, markAllNotificationsAsRead, fetchNotifications,
+      theme, toggleTheme
     }}>
       {children}
     </AppContext.Provider>

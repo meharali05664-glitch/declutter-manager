@@ -5,8 +5,8 @@ import { useApp } from '../context/AppContext'
 function SettingRow({ icon, label, sub, right, onClick, id }) {
   return (
     <div id={id} onClick={onClick}
-      style={{ display:'flex', alignItems:'center', gap:'14px', padding:'14px 0', borderBottom:'1px solid rgba(255,255,255,0.05)', cursor: onClick?'pointer':'default' }}>
-      <div style={{ width:'38px', height:'38px', borderRadius:'12px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>
+      style={{ display:'flex', alignItems:'center', gap:'14px', padding:'14px 0', borderBottom:'1px solid rgba(var(--theme-rgb),0.05)', cursor: onClick?'pointer':'default' }}>
+      <div style={{ width:'38px', height:'38px', borderRadius:'12px', background:'rgba(var(--theme-rgb),0.06)', border:'1px solid rgba(var(--theme-rgb),0.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>
         {icon}
       </div>
       <div style={{ flex:1 }}>
@@ -21,7 +21,7 @@ function SettingRow({ icon, label, sub, right, onClick, id }) {
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { user, monthlySpend, savedAmount, activeSubs, healthScore, logout, refreshUserProfile } = useApp()
+  const { user, monthlySpend, savedAmount, activeSubs, healthScore, logout, refreshUserProfile, theme, toggleTheme } = useApp()
 
   useEffect(() => {
     refreshUserProfile()
@@ -79,7 +79,7 @@ export default function Settings() {
           </div>
 
           {/* Stats row */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', paddingTop:'16px', borderTop:'1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', paddingTop:'16px', borderTop:'1px solid rgba(var(--theme-rgb),0.07)' }}>
             {[
               { label:'Health Score', value: healthScore, color:'#10D9A0' },
               { label:'Active Subs', value: activeSubs.length, color:'#A78BFA' },
@@ -119,9 +119,10 @@ export default function Settings() {
         <div>
           <p style={{ fontSize:'12px', fontWeight:'600', color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:'12px' }}>App Settings</p>
           <div className="glass" style={{ padding:'4px 16px' }}>
+            <SettingRow id="theme-row" icon={theme === 'dark' ? '🌙' : '☀️'} label="Dark Mode" sub="Toggle application theme" right={<Toggle val={theme === 'dark'} onChange={toggleTheme}/>} />
             <SettingRow id="currency-row" icon="💰" label="Currency" right={
               <select id="currency-select" value={currency} onChange={e=>setCurrency(e.target.value)}
-                style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'var(--text)', fontSize:'12px', padding:'5px 8px', outline:'none', fontFamily:'Inter,sans-serif' }}>
+                style={{ background:'rgba(var(--theme-rgb),0.06)', border:'1px solid rgba(var(--theme-rgb),0.1)', borderRadius:'8px', color:'var(--text)', fontSize:'12px', padding:'5px 8px', outline:'none', fontFamily:'Inter,sans-serif' }}>
                 <option value="PKR">🇵🇰 PKR</option>
                 <option value="INR">🇮🇳 INR</option>
                 <option value="USD">🇺🇸 USD</option>

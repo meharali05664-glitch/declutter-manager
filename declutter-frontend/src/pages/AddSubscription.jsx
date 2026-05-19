@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
@@ -47,7 +47,10 @@ export default function AddSubscription() {
   const [success, setSuccess] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [extractedData, setExtractedData] = useState(false)
+  const [advice, setAdvice] = useState(null)
+  const [loadingAdvice, setLoadingAdvice] = useState(false)
   const fileInputRef = useRef(null)
+
 
   const pickQuick = (svc) => {
     setQuickSelected(svc.name)
@@ -112,6 +115,39 @@ export default function AddSubscription() {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
+
+  useEffect(() => {
+    if (!form.name || form.name.length < 2) {
+      setAdvice(null)
+      return
+    }
+
+    const handler = setTimeout(async () => {
+      setLoadingAdvice(true)
+      try {
+        const token = localStorage.getItem('declutter_token')
+        const headers = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+        const res = await fetch(`${API_BASE}/ai/advice/add?name=${encodeURIComponent(form.name)}`, { headers })
+        if (res.ok) {
+          const data = await res.json()
+          setAdvice(data)
+        } else {
+          setAdvice(null)
+        }
+      } catch (err) {
+        console.error(err)
+        setAdvice(null)
+      } finally {
+        setLoadingAdvice(false)
+      }
+    }, 600)
+
+    return () => clearTimeout(handler)
+  }, [form.name]) // Wait, React imports are already at top
+
 
   const handleSave = async () => {
     if (!form.name.trim() || (form.amount === '' && !form.isTrial)) return
@@ -227,6 +263,45 @@ export default function AddSubscription() {
                 value={form.name} onChange={e=>F('name',e.target.value)}/>
             </div>
           </div>
+
+          {/* AI Pre-purchase Advice */}
+          {loadingAdvice && (
+            <div style={{ background: 'rgba(var(--theme-rgb), 0.03)', border: '1px dashed rgba(var(--theme-rgb), 0.15)', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '20px' }}>🤖</span>
+              <span style={{ fontSize: '13px', color: 'var(--text2)' }}>Retrieving community advice...</span>
+            </div>
+          )}
+          {!loadingAdvice && advice && (
+            <div className="anim-up" style={{ 
+              background: advice.recommendation === 'buy' ? 'rgba(16, 217, 160, 0.06)' : advice.recommendation === 'avoid' ? 'rgba(255, 77, 109, 0.06)' : 'rgba(255, 184, 77, 0.06)', 
+              border: `1px solid ${advice.recommendation === 'buy' ? 'rgba(16, 217, 160, 0.2)' : advice.recommendation === 'avoid' ? 'rgba(255, 77, 109, 0.2)' : 'rgba(255, 184, 77, 0.2)'}`, 
+              borderRadius: '14px', padding: '16px' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <p style={{ 
+                  fontSize: '14px', fontWeight: '800', 
+                  color: advice.recommendation === 'buy' ? '#10D9A0' : advice.recommendation === 'avoid' ? '#FF4D6D' : '#FFB84D' 
+                }}>
+                  ✨ AI Advice: {advice.title}
+                </p>
+                <span style={{ 
+                  fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '99px',
+                  background: advice.recommendation === 'buy' ? 'rgba(16, 217, 160, 0.15)' : advice.recommendation === 'avoid' ? 'rgba(255, 77, 109, 0.15)' : 'rgba(255, 184, 77, 0.15)',
+                  color: advice.recommendation === 'buy' ? '#10D9A0' : advice.recommendation === 'avoid' ? '#FF4D6D' : '#FFB84D' 
+                }}>
+                  {advice.recommendation.toUpperCase()}
+                </span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text)', lineHeight: '1.4', marginBottom: '8px' }}>
+                {advice.text}
+              </p>
+              {advice.tips && (
+                <p style={{ fontSize: '12px', color: 'var(--text2)', fontStyle: 'italic', borderTop: '1px solid rgba(var(--theme-rgb), 0.05)', paddingTop: '6px' }}>
+                  💡 <strong>Tip:</strong> {advice.tips}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Amount + Cycle */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>

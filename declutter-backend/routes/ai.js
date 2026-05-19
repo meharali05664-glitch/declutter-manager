@@ -2,7 +2,7 @@ const express = require('express')
 const router = express.Router()
 const jwt = require('jsonwebtoken')
 const { PrismaClient } = require('@prisma/client')
-const { getSmartRecommendations } = require('../services/aiService')
+const { getSmartRecommendations, getPrePurchaseAdvice, getPreCancelAdvice } = require('../services/aiService')
 const { GoogleGenerativeAI } = require('@google/generative-ai')
 
 const prisma = new PrismaClient()
@@ -155,5 +155,83 @@ If you are unsure about any field, return an empty string for that field (or 0 f
     res.status(500).json({ error: err.message || 'Failed to extract data from image.', details: err.stack });
   }
 })
+
+/**
+ * GET /api/ai/advice/add
+ * Returns pre-purchase RAG recommendations based on community stats
+ */
+router.get('/advice/add', auth, async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) return res.status(400).json({ error: 'Name query parameter is required.' });
+
+    // Look up matching community subscriptions case-insensitively
+    const allMatches = await prisma.subscription.findMany({
+      where: { name: { contains: name } }
+    });
+
+    const totalCount = allMatches.length;
+    const activeCount = allMatches.filter(s => s.status === 'active').length;
+    const cancelledCount = allMatches.filter(s => s.status === 'cancelled').length;
+    const avgUsageHours = totalCount > 0 ? (allMatches.reduce((acc, s) => acc + s.usageHours, 0) / totalCount) : 0;
+    const shareRate = totalCount > 0 ? (allMatches.filter(s => s.isShared).length / totalCount) : 0;
+    const avgAmount = totalCount > 0 ? (allMatches.reduce((acc, s) => acc + s.amount, 0) / totalCount) : 0;
+    const retentionRate = totalCount > 0 ? (activeCount / totalCount) : 0.5;
+
+    const advice = await getPrePurchaseAdvice(name, {
+      totalCount,
+      activeCount,
+      cancelledCount,
+      avgUsageHours: parseFloat(avgUsageHours.toFixed(1)),
+      shareRate,
+      avgAmount,
+      retentionRate
+    });
+
+    res.json(advice);
+  } catch (err) {
+    console.error('AI Add Advice Error:', err);
+    res.status(500).json({ error: 'Failed to generate pre-purchase advice.' });
+  }
+});
+
+/**
+ * GET /api/ai/advice/cancel
+ * Returns pre-cancel RAG recommendations comparing user and community stats
+ */
+router.get('/advice/cancel', auth, async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'Subscription ID (id) query parameter is required.' });
+
+    const sub = await prisma.subscription.findUnique({
+      where: { id }
+    });
+    if (!sub) return res.status(404).json({ error: 'Subscription not found.' });
+
+    const allMatches = await prisma.subscription.findMany({
+      where: { name: { contains: sub.name } }
+    });
+
+    const totalCount = allMatches.length;
+    const activeCount = allMatches.filter(s => s.status === 'active').length;
+    const cancelledCount = allMatches.filter(s => s.status === 'cancelled').length;
+    const avgUsageHours = totalCount > 0 ? (allMatches.reduce((acc, s) => acc + s.usageHours, 0) / totalCount) : 0;
+    const retentionRate = totalCount > 0 ? (activeCount / totalCount) : 0.5;
+
+    const advice = await getPreCancelAdvice(sub, {
+      totalCount,
+      activeCount,
+      cancelledCount,
+      avgUsageHours: parseFloat(avgUsageHours.toFixed(1)),
+      retentionRate
+    });
+
+    res.json(advice);
+  } catch (err) {
+    console.error('AI Cancel Advice Error:', err);
+    res.status(500).json({ error: 'Failed to generate pre-cancel advice.' });
+  }
+});
 
 module.exports = router

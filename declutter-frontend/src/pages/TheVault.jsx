@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
@@ -21,6 +21,38 @@ export default function TheVault() {
   const [statusTab, setStatusTab] = useState('active')
   const [sort, setSort] = useState('renewal')
   const [selected, setSelected] = useState(null)
+  const [cancellingSub, setCancellingSub] = useState(null)
+  const [cancelAdvice, setCancelAdvice] = useState(null)
+  const [loadingCancelAdvice, setLoadingCancelAdvice] = useState(false)
+
+  useEffect(() => {
+    if (!cancellingSub) {
+      setCancelAdvice(null)
+      return
+    }
+
+    const fetchAdvice = async () => {
+      setLoadingCancelAdvice(true)
+      try {
+        const token = localStorage.getItem('declutter_token')
+        const headers = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+        const res = await fetch(`${API_BASE}/ai/advice/cancel?id=${cancellingSub.id}`, { headers })
+        if (res.ok) {
+          const data = await res.json()
+          setCancelAdvice(data)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoadingCancelAdvice(false)
+      }
+    }
+
+    fetchAdvice()
+  }, [cancellingSub])
 
   let filtered = subscriptions.filter(s => s.status === statusTab)
   if (catFilter !== 'All') filtered = filtered.filter(s => s.category === catFilter)
@@ -117,6 +149,55 @@ export default function TheVault() {
           </>
         )}
       </div>
+      {/* Pre-Cancel RAG AI Advice Modal */}
+      {cancellingSub && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass anim-bounce" style={{ maxWidth: '400px', width: '100%', padding: '24px', background: 'var(--bg2)', border: '1px solid rgba(var(--theme-rgb), 0.1)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '12px', fontFamily: 'Sora, sans-serif' }}>
+              Cancel {cancellingSub.name}?
+            </h3>
+
+            {loadingCancelAdvice ? (
+              <div style={{ padding: '20px 0', textAlign: 'center' }}>
+                <span style={{ fontSize: '24px' }}>🤖</span>
+                <p style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '8px' }}>Declutter AI is reviewing community stats...</p>
+              </div>
+            ) : cancelAdvice ? (
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ background: 'rgba(var(--theme-rgb), 0.04)', borderRadius: '12px', padding: '14px', marginBottom: '14px', borderLeft: `4px solid ${cancelAdvice.recommendation === 'cancel' ? '#FF4D6D' : '#10D9A0'}` }}>
+                  <p style={{ fontWeight: '700', fontSize: '14px', color: cancelAdvice.recommendation === 'cancel' ? '#FF4D6D' : '#10D9A0', marginBottom: '6px' }}>
+                    Recommendation: {cancelAdvice.recommendation === 'cancel' ? 'Cancel Service' : 'Keep / Pause'}
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--text)', lineHeight: '1.4' }}>
+                    {cancelAdvice.text}
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(var(--theme-rgb), 0.03)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text2)' }}>Estimated Savings:</span>
+                  <strong style={{ color: '#10D9A0' }}>Rs. {cancelAdvice.savings}</strong>
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: '14px', color: 'var(--text2)', marginBottom: '20px' }}>
+                Are you sure you want to cancel this subscription? You will save Rs. {(cancellingSub.myShare * 12).toLocaleString()} per year.
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button id="confirm-cancel-btn" onClick={() => {
+                updateSubscription(cancellingSub.id, { status: 'cancelled' });
+                setCancellingSub(null);
+              }} className="btn btn-danger" style={{ flex: 1, padding: '12px' }}>
+                Yes, Cancel
+              </button>
+              <button onClick={() => setCancellingSub(null)} className="btn btn-ghost" style={{ flex: 1, padding: '12px' }}>
+                Keep It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -195,7 +276,7 @@ export default function TheVault() {
                 className="btn btn-ghost" style={{ padding:'10px', fontSize:'12px', borderRadius:'12px' }}>
                 {sub.status==='active' ? '⏸ Pause' : '▶ Resume'}
               </button>
-              <button id={`cancel-btn-${sub.id}`} onClick={() => updateSubscription(sub.id, { status:'cancelled' })}
+              <button id={`cancel-btn-${sub.id}`} onClick={() => setCancellingSub(sub)}
                 className="btn" style={{ padding:'10px', fontSize:'12px', borderRadius:'12px', background:'rgba(255,77,109,0.15)', border:'1px solid rgba(255,77,109,0.25)', color:'#FF4D6D' }}>
                 ✕ Cancel
               </button>
